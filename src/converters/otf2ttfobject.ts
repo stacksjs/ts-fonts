@@ -17,6 +17,16 @@ export interface Otf2TtfOptions {
   subset?: number[]
 }
 
+// OpenType layout / color / vertical-metrics tables we preserve as raw
+// bytes (we don't model them structurally yet but downstream consumers can
+// re-emit them unchanged, e.g. via a writer's pass-through hook).
+const PRESERVED_RAW_TAGS = [
+  'GSUB', 'GPOS', 'GDEF', 'BASE', 'JSTF', 'MATH',
+  'COLR', 'CPAL', 'SVG ', 'sbix', 'CBDT', 'CBLC',
+  'DSIG', 'meta', 'VORG', 'VVAR', 'VDMX', 'LTSH',
+  'PCLT', 'hdmx', 'vhea', 'vmtx', 'EBDT', 'EBLC', 'EBSC',
+]
+
 /**
  * Parse an OTF (OpenType with CFF outlines) into a TTF-shaped object.
  * Performs full CFF parsing: charstring interpretation + cubic→quadratic
@@ -84,6 +94,18 @@ export function otf2ttfobject(buffer: ArrayBuffer, options: Otf2TtfOptions = {})
     if (!g.unicode) g.unicode = []
     g.unicode.push(Number.parseInt(codeStr, 10))
   }
+
+  // Preserve raw bytes for tables we don't structurally model. Glyph
+  // indices in these tables remain valid so long as caller does not
+  // reorder or subset glyf — same caveat as TTFReader's handling.
+  const rawTables: Record<string, Uint8Array> = {}
+  for (const tag of PRESERVED_RAW_TAGS) {
+    const entry = dir.tables[tag]
+    if (!entry) continue
+    rawTables[tag] = new Uint8Array(reader.readBytes(entry.offset, entry.length))
+  }
+  if (Object.keys(rawTables).length > 0)
+    ttf.rawTables = rawTables
 
   // Force to TTF sfnt version
   ttf.version = 0x10000

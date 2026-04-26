@@ -21,6 +21,7 @@ import {
   encodeWOFF2Native,
   extractTTCFont,
   isTTC,
+  otf2ttfobject,
   paragraphLevel,
   parse,
   parseCollection,
@@ -106,6 +107,28 @@ describe('validateTTF', () => {
   it('Font#validate() proxies the function', () => {
     const font = parse(loadBuffer('bebas.ttf'))
     expect(Array.isArray(font.validate())).toBe(true)
+  })
+})
+
+describe('otf2ttfobject preserves OpenType layout tables', () => {
+  it('captures GSUB/GPOS/meta as raw bytes when present in source OTF', () => {
+    const buf = loadBuffer('SFNSDisplayCondensed-Black.otf')
+    const ttf = otf2ttfobject(buf)
+    expect(ttf.rawTables).toBeDefined()
+    const tags = Object.keys(ttf.rawTables ?? {})
+    expect(tags).toContain('GSUB')
+    expect(tags).toContain('GPOS')
+    // Each preserved table must carry non-empty bytes.
+    for (const tag of tags) {
+      expect(ttf.rawTables![tag]!.length).toBeGreaterThan(0)
+    }
+  })
+
+  it('omits rawTables when the OTF has none of the preserved tags', () => {
+    const buf = loadBuffer('BalladeContour.otf')
+    const ttf = otf2ttfobject(buf)
+    // BalladeContour is a minimal OTF with no GSUB/GPOS/etc.
+    expect(ttf.rawTables).toBeUndefined()
   })
 })
 

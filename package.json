@@ -1,24 +1,30 @@
 {
-  "name": "ts-font-editor",
+  "name": "ts-fonts",
   "type": "module",
-  "version": "0.4.0",
-  "description": "A simple TypeScript starter kit using Bun.",
+  "version": "0.5.0",
+  "description": "A pure-TypeScript font toolkit for Bun: read/write TTF/OTF/WOFF/WOFF2, build variable fonts, opentype.js-compatible Path/Glyph/Font, native WOFF2 (Brotli-backed), GSUB authoring, and CFF emission.",
   "author": "Chris Breuer <chris@stacksjs.org>",
   "license": "MIT",
-  "homepage": "https://github.com/stacksjs/ts-starter#readme",
+  "homepage": "https://github.com/stacksjs/ts-fonts#readme",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/stacksjs/ts-starter.git"
+    "url": "git+https://github.com/stacksjs/ts-fonts.git"
   },
   "bugs": {
-    "url": "https://github.com/stacksjs/ts-starter/issues"
+    "url": "https://github.com/stacksjs/ts-fonts/issues"
   },
   "keywords": [
     "typescript",
-    "starter",
-    "kit",
     "bun",
-    "package"
+    "font",
+    "ttf",
+    "otf",
+    "woff",
+    "woff2",
+    "opentype",
+    "variable-font",
+    "cff",
+    "gsub"
   ],
   "exports": {
     ".": {

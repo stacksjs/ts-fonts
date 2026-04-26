@@ -22,7 +22,19 @@ import { readStat } from './tables/stat'
 export interface TTFReaderOptions {
   subset?: number[]
   hinting?: boolean
+  /** Preserve `kern` table (legacy kerning). Default off. */
   kerning?: boolean
+  /**
+   * Preserve OpenType layout tables (`GSUB`, `GPOS`, `GDEF`) as raw bytes
+   * on `ttf.rawTables`. Default `true`.
+   *
+   * Historically this was tied to the `kerning` flag; that coupling was
+   * surprising — fonts with ligatures should round-trip GSUB whether or
+   * not the caller cares about kerning. Pass `false` if you specifically
+   * want a layout-table-stripped TTF (e.g. before re-authoring GSUB from
+   * scratch via `Substitution`).
+   */
+  preserveLayout?: boolean
   compound2simple?: boolean
 }
 
@@ -265,6 +277,9 @@ export class TTFReader {
     }
     if (!this.options.kerning) {
       delete ttf.kern
+    }
+    // Default: preserve layout tables. Pass `preserveLayout: false` to drop them.
+    if (this.options.preserveLayout === false) {
       delete ttf.GPOS
       if (ttf.rawTables) {
         delete ttf.rawTables.GPOS

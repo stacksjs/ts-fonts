@@ -387,6 +387,12 @@ export interface TTFObject {
    * (GSUB, GPOS, GDEF, BASE, JSTF, MATH, COLR, CPAL, SVG, DSIG, meta, VORG, VVAR, VDMX, LTSH, PCLT, hdmx, vhea, vmtx).
    */
   rawTables?: Record<string, Uint8Array>
+  /**
+   * Authored GSUB content. When present, `TTFWriter` serialises this into
+   * a real `GSUB` table (overriding any preserved `rawTables.GSUB`).
+   * Populate via `font.substitution.add('liga', { sub, by })`.
+   */
+  gsub?: GsubAuthoring
   support?: {
     tables?: Array<{ name: string, checkSum: number, offset: number, length: number, size: number }>
     head?: Partial<HeadTable>
@@ -394,6 +400,34 @@ export interface TTFObject {
     [k: string]: unknown
   }
   subsetMap?: Record<number, number>
+}
+
+/** Single ligature rule: glyph IDs `sub` collapse into single glyph `by`. */
+export interface GsubLigatureEntry {
+  /** Glyph IDs to match in left-to-right order (length ≥ 2). */
+  sub: number[]
+  /** Replacement glyph ID. */
+  by: number
+}
+
+/** A 4-character feature tag plus its ordered list of authored lookups. */
+export interface GsubFeatureAuthoring {
+  /** Ligature substitutions (lookup type 4). */
+  ligatures?: GsubLigatureEntry[]
+}
+
+/**
+ * Authored GSUB content for a single script/language scope. The serialiser
+ * emits one ScriptList entry (default-language only), one FeatureList entry
+ * per declared feature, and one Lookup per feature kind.
+ */
+export interface GsubAuthoring {
+  /** Per-feature authoring buckets keyed by feature tag (`liga`, `rlig`, ...). */
+  features: Record<string, GsubFeatureAuthoring>
+  /** Script tag (default `'DFLT'`). */
+  script?: string
+  /** Language tag (default `'dflt'`). */
+  language?: string
 }
 
 export interface FontReadOptions {

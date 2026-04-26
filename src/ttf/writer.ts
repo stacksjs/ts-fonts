@@ -6,6 +6,7 @@ import { avarSize, writeAvar } from './tables/avar'
 import { cmapSize, writeCmap } from './tables/cmap'
 import { fvarSize, writeFvar } from './tables/fvar'
 import { computeGlyfSizes, writeGlyph } from './tables/glyf'
+import { gsubSize, writeGsub } from './tables/gsub'
 import { gvarSize, writeGvar } from './tables/gvar'
 import { HEAD_SIZE, writeHead } from './tables/head'
 import { HHEA_SIZE, writeHhea } from './tables/hhea'
@@ -229,12 +230,22 @@ export class TTFWriter {
     if (ttf.HVAR?.raw) list.push({ tag: 'HVAR', size: ttf.HVAR.raw.length, write: w => w.writeBytes(ttf.HVAR!.raw!) })
     if (ttf.MVAR?.raw) list.push({ tag: 'MVAR', size: ttf.MVAR.raw.length, write: w => w.writeBytes(ttf.MVAR!.raw!) })
 
+    // Authored GSUB takes precedence over any preserved raw GSUB.
+    let authoredGsubSize = 0
+    if (ttf.gsub) {
+      authoredGsubSize = gsubSize(ttf)
+      if (authoredGsubSize > 0)
+        list.push({ tag: 'GSUB', size: authoredGsubSize, write: writeGsub })
+    }
+
     // Preserved raw OpenType / vertical-metrics / color tables
     if (ttf.rawTables) {
       const emitRaw = this.options.kerning
         ? Object.keys(ttf.rawTables)
         : Object.keys(ttf.rawTables).filter(t => t !== 'GPOS' && t !== 'GSUB' && t !== 'GDEF')
       for (const tag of emitRaw) {
+        // Skip raw GSUB if we just emitted an authored one.
+        if (tag === 'GSUB' && authoredGsubSize > 0) continue
         const data = ttf.rawTables[tag]
         if (!data || data.length === 0) continue
         list.push({ tag, size: data.length, write: w => w.writeBytes(data) })

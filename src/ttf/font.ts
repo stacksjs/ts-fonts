@@ -44,6 +44,7 @@ import {
 import { LayerManager } from '../ot/layers'
 import { PaletteManager } from '../ot/palettes'
 import { Path } from '../ot/path'
+import { Substitution } from '../ot/substitution'
 import type { CanvasLike } from '../ot/path'
 import { getEmptyTTFObject } from './empty'
 import { TTFReader } from './reader'
@@ -71,6 +72,17 @@ function normalizeInput(input: FontInput): ArrayBuffer | string | { nodeType: nu
 export class Font {
   data: TTFObject
   type?: string
+  private _substitution?: Substitution
+
+  /**
+   * Authoring access to GSUB. opentype.js-compatible:
+   *
+   *   font.substitution.add('liga', { sub: [a, b], by: c })
+   */
+  get substitution(): Substitution {
+    if (!this._substitution) this._substitution = new Substitution(this)
+    return this._substitution
+  }
 
   constructor(buffer?: FontInput | TTFObject, options: FontReadOptions = { type: 'ttf' }) {
     if (!buffer) {

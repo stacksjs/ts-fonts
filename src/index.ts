@@ -65,6 +65,8 @@ export {
 } from './svg/transform'
 
 // TTF core
+export type { BuildFontOptions } from './ttf/build'
+export { buildFontFromGlyphs } from './ttf/build'
 export { getEmptyTTFObject } from './ttf/empty'
 export * from './ttf/enum'
 export { createFont, Font } from './ttf/font'
@@ -107,6 +109,18 @@ export {
   normalizeCoordinates,
   normalizedCoordsArray,
 } from './variable/instance'
+
+// CFF / OTF writing
+export type { CffWriteOptions } from './cff/writer'
+export { writeCFF } from './cff/writer'
+export { encodeCharstring } from './cff/charstring-encoder'
+export type { OTFWriterOptions } from './cff/otf-writer'
+export { createOTFWriter, OTFWriter } from './cff/otf-writer'
+
+// GSUB authoring
+export type { SubstitutionLigatureInput } from './ot/substitution'
+export { Substitution } from './ot/substitution'
+export type { GsubAuthoring, GsubFeatureAuthoring, GsubLigatureEntry } from './types'
 
 // WOFF2 bridge
 export { woff2 } from './woff2'

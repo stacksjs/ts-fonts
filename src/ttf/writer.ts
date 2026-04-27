@@ -6,6 +6,7 @@ import { avarSize, writeAvar } from './tables/avar'
 import { cmapSize, writeCmap } from './tables/cmap'
 import { fvarSize, writeFvar } from './tables/fvar'
 import { computeGlyfSizes, writeGlyph } from './tables/glyf'
+import { gposSize, writeGpos } from './tables/gpos'
 import { gsubSize, writeGsub } from './tables/gsub'
 import { gvarSize, writeGvar } from './tables/gvar'
 import { HEAD_SIZE, writeHead } from './tables/head'
@@ -237,6 +238,12 @@ export class TTFWriter {
       if (authoredGsubSize > 0)
         list.push({ tag: 'GSUB', size: authoredGsubSize, write: writeGsub })
     }
+    let authoredGposSize = 0
+    if (ttf.gpos) {
+      authoredGposSize = gposSize(ttf)
+      if (authoredGposSize > 0)
+        list.push({ tag: 'GPOS', size: authoredGposSize, write: writeGpos })
+    }
 
     // Preserved raw OpenType / vertical-metrics / color tables
     if (ttf.rawTables) {
@@ -244,8 +251,9 @@ export class TTFWriter {
         ? Object.keys(ttf.rawTables)
         : Object.keys(ttf.rawTables).filter(t => t !== 'GPOS' && t !== 'GSUB' && t !== 'GDEF')
       for (const tag of emitRaw) {
-        // Skip raw GSUB if we just emitted an authored one.
+        // Skip raw GSUB/GPOS if we just emitted an authored one.
         if (tag === 'GSUB' && authoredGsubSize > 0) continue
+        if (tag === 'GPOS' && authoredGposSize > 0) continue
         const data = ttf.rawTables[tag]
         if (!data || data.length === 0) continue
         list.push({ tag, size: data.length, write: w => w.writeBytes(data) })

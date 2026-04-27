@@ -19,6 +19,7 @@ import { Writer } from '../io/writer'
 import { checkSum, pad4 } from '../ttf/checksum'
 import { CHECKSUM_MAGIC } from '../ttf/enum'
 import { cmapSize, writeCmap } from '../ttf/tables/cmap'
+import { gposSize, writeGpos } from '../ttf/tables/gpos'
 import { gsubSize, writeGsub } from '../ttf/tables/gsub'
 import { HEAD_SIZE, writeHead } from '../ttf/tables/head'
 import { HHEA_SIZE, writeHhea } from '../ttf/tables/hhea'
@@ -200,6 +201,10 @@ export class OTFWriter {
     if (ttf.gsub) {
       const gs = gsubSize(ttf)
       if (gs > 0) list.push({ tag: 'GSUB', size: gs, write: (w, t) => writeGsub(w, t) })
+    }
+    if (ttf.gpos) {
+      const gp = gposSize(ttf)
+      if (gp > 0) list.push({ tag: 'GPOS', size: gp, write: (w, t) => writeGpos(w, t) })
     }
 
     return list

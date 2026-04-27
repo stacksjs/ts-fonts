@@ -44,6 +44,7 @@ import {
 import { LayerManager } from '../ot/layers'
 import { PaletteManager } from '../ot/palettes'
 import { Path } from '../ot/path'
+import { Positioning } from '../ot/positioning'
 import { Substitution } from '../ot/substitution'
 import type { CanvasLike } from '../ot/path'
 import { getEmptyTTFObject } from './empty'
@@ -82,6 +83,18 @@ export class Font {
   get substitution(): Substitution {
     if (!this._substitution) this._substitution = new Substitution(this)
     return this._substitution
+  }
+
+  private _positioning?: Positioning
+
+  /**
+   * Authoring access to GPOS. Most useful for kerning pairs:
+   *
+   *   font.positioning.addPair('kern', glyphA, glyphB, { xAdvance: -40 })
+   */
+  get positioning(): Positioning {
+    if (!this._positioning) this._positioning = new Positioning(this)
+    return this._positioning
   }
 
   constructor(buffer?: FontInput | TTFObject, options: FontReadOptions = { type: 'ttf' }) {

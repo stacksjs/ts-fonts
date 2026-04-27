@@ -14,7 +14,7 @@
  */
 
 import type { Writer } from '../../io/writer'
-import type { GsubAuthoring, GsubFeatureAuthoring, GsubLigatureEntry, TTFObject } from '../../types'
+import type { GsubAlternateEntry, GsubAuthoring, GsubFeatureAuthoring, GsubLigatureEntry, GsubMultipleEntry, GsubSingleEntry, TTFObject } from '../../types'
 
 /** Pad to 4-byte boundary; GSUB tables don't strictly require it but we keep
  * sub-table layout aligned for readability and round-trip stability. */
@@ -164,25 +164,154 @@ function buildLigatureSubtable(ligs: GsubLigatureEntry[]): { size: number, write
   }
 }
 
+/**
+ * Single Substitution Format 2 subtable.
+ *
+ * Format 2 lists a coverage of input glyphs and a parallel list of output
+ * glyphs. Format 1 (delta-only) is more compact for evenly-spaced subs but
+ * we use format 2 for generality.
+ */
+function buildSingleSubtable(entries: GsubSingleEntry[]): { size: number, write: (w: Writer) => void } {
+  // Sort by `sub` so coverage is ascending.
+  const sorted = [...entries].sort((a, b) => a.sub - b.sub)
+  const subs = sorted.map(e => e.sub)
+  const bys = sorted.map(e => e.by)
+  const coverage = buildCoverageFormat1(subs)
+  const headerSize = 6 + bys.length * 2
+  const subtableSize = headerSize + coverage.size
+
+  return {
+    size: pad2(subtableSize),
+    write: (w) => {
+      const subStart = w.offset
+      w.writeUint16(2) // substFormat = 2
+      const coverageOffsetPos = w.offset
+      w.writeUint16(0)
+      w.writeUint16(bys.length)
+      for (const by of bys) w.writeUint16(by)
+      const coverageOff = w.offset - subStart
+      coverage.write(w)
+      const end = w.offset
+      w.seek(coverageOffsetPos); w.writeUint16(coverageOff); w.seek(end)
+      const padded = subStart + pad2(subtableSize)
+      while (w.offset < padded) w.writeUint8(0)
+    },
+  }
+}
+
+function buildMultipleSubtable(entries: GsubMultipleEntry[]): { size: number, write: (w: Writer) => void } {
+  // Group by `sub` glyph, keeping first occurrence's `by` (multi sub doesn't
+  // alternate per glyph; one input maps to one fixed output sequence).
+  const sorted = [...entries].sort((a, b) => a.sub - b.sub)
+  const subs = sorted.map(e => e.sub)
+  const sequences = sorted.map(e => e.by)
+  const coverage = buildCoverageFormat1(subs)
+  // Sequence sub-records are separate sub-tables-within-subtable.
+  const sequenceSizes = sequences.map(seq => 2 + seq.length * 2)
+  const headerSize = 6 + sequences.length * 2
+  const subtableSize = headerSize + coverage.size + sequenceSizes.reduce((a, b) => a + b, 0)
+  return {
+    size: pad2(subtableSize),
+    write: (w) => {
+      const subStart = w.offset
+      w.writeUint16(1) // format
+      const coverageOffsetPos = w.offset
+      w.writeUint16(0)
+      w.writeUint16(sequences.length)
+      const seqOffsetsPos = w.offset
+      for (let i = 0; i < sequences.length; i++) w.writeUint16(0)
+      const coverageOff = w.offset - subStart
+      coverage.write(w)
+      const seqOffs: number[] = []
+      for (const seq of sequences) {
+        seqOffs.push(w.offset - subStart)
+        w.writeUint16(seq.length)
+        for (const g of seq) w.writeUint16(g)
+      }
+      const end = w.offset
+      w.seek(coverageOffsetPos); w.writeUint16(coverageOff)
+      w.seek(seqOffsetsPos); for (const o of seqOffs) w.writeUint16(o)
+      w.seek(end)
+      const padded = subStart + pad2(subtableSize)
+      while (w.offset < padded) w.writeUint8(0)
+    },
+  }
+}
+
+function buildAlternateSubtable(entries: GsubAlternateEntry[]): { size: number, write: (w: Writer) => void } {
+  const sorted = [...entries].sort((a, b) => a.sub - b.sub)
+  const subs = sorted.map(e => e.sub)
+  const altSets = sorted.map(e => e.alternates)
+  const coverage = buildCoverageFormat1(subs)
+  const altSetSizes = altSets.map(set => 2 + set.length * 2)
+  const headerSize = 6 + altSets.length * 2
+  const subtableSize = headerSize + coverage.size + altSetSizes.reduce((a, b) => a + b, 0)
+  return {
+    size: pad2(subtableSize),
+    write: (w) => {
+      const subStart = w.offset
+      w.writeUint16(1) // format
+      const coverageOffsetPos = w.offset
+      w.writeUint16(0)
+      w.writeUint16(altSets.length)
+      const setOffsetsPos = w.offset
+      for (let i = 0; i < altSets.length; i++) w.writeUint16(0)
+      const coverageOff = w.offset - subStart
+      coverage.write(w)
+      const setOffs: number[] = []
+      for (const set of altSets) {
+        setOffs.push(w.offset - subStart)
+        w.writeUint16(set.length)
+        for (const g of set) w.writeUint16(g)
+      }
+      const end = w.offset
+      w.seek(coverageOffsetPos); w.writeUint16(coverageOff)
+      w.seek(setOffsetsPos); for (const o of setOffs) w.writeUint16(o)
+      w.seek(end)
+      const padded = subStart + pad2(subtableSize)
+      while (w.offset < padded) w.writeUint8(0)
+    },
+  }
+}
+
 function planFeature(tag: string, feat: GsubFeatureAuthoring): { lookups: LookupPlan[], featureLookupIndices: number[] } {
   const lookups: LookupPlan[] = []
   const featureLookupIndices: number[] = []
 
+  if (feat.singles && feat.singles.length > 0) {
+    const sub = buildSingleSubtable(feat.singles)
+    lookups.push({
+      type: 1, flag: 0, subtableSizes: [sub.size],
+      writeSubtable: (w, idx) => { if (idx === 0) sub.write(w) },
+    })
+    featureLookupIndices.push(lookups.length - 1)
+  }
+  if (feat.multiples && feat.multiples.length > 0) {
+    const sub = buildMultipleSubtable(feat.multiples)
+    lookups.push({
+      type: 2, flag: 0, subtableSizes: [sub.size],
+      writeSubtable: (w, idx) => { if (idx === 0) sub.write(w) },
+    })
+    featureLookupIndices.push(lookups.length - 1)
+  }
+  if (feat.alternates && feat.alternates.length > 0) {
+    const sub = buildAlternateSubtable(feat.alternates)
+    lookups.push({
+      type: 3, flag: 0, subtableSizes: [sub.size],
+      writeSubtable: (w, idx) => { if (idx === 0) sub.write(w) },
+    })
+    featureLookupIndices.push(lookups.length - 1)
+  }
   if (feat.ligatures && feat.ligatures.length > 0) {
     const sub = buildLigatureSubtable(feat.ligatures)
     lookups.push({
-      type: 4,
-      flag: 0,
-      subtableSizes: [sub.size],
+      type: 4, flag: 0, subtableSizes: [sub.size],
       writeSubtable: (w, idx) => { if (idx === 0) sub.write(w) },
     })
-    featureLookupIndices.push(lookups.length - 1) // index into per-feature lookups
+    featureLookupIndices.push(lookups.length - 1)
   }
 
-  // Future feature kinds (singles, alternates, multiples) extend the same
-  // pattern: build subtable(s), append a LookupPlan, push the index.
-
-  void tag // tag-specific dispatch could happen here for non-default behaviour
+  void tag
   return { lookups, featureLookupIndices }
 }
 

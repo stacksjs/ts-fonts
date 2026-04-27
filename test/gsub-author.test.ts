@@ -91,4 +91,29 @@ describe('GSUB authoring', () => {
     expect(() => font.substitution.add('liga', { sub: [], by: 2 }))
       .toThrow()
   })
+
+  it('accepts single substitutions (lookup type 1)', () => {
+    const font = loadFixtureFont()
+    font.substitution.add('smcp', { sub: 5, by: 10 })
+    expect(font.data.gsub!.features.smcp?.singles).toEqual([{ sub: 5, by: 10 }])
+    const out = new TTFWriter().write(font.data)
+    const reparsed = new TTFReader().read(out)
+    expect(reparsed.rawTables?.GSUB?.byteLength ?? 0).toBeGreaterThan(20)
+  })
+
+  it('accepts multiple substitutions (lookup type 2)', () => {
+    const font = loadFixtureFont()
+    font.substitution.add('ccmp', { sub: 7, by: [8, 9, 10] })
+    expect(font.data.gsub!.features.ccmp?.multiples).toEqual([{ sub: 7, by: [8, 9, 10] }])
+    const out = new TTFWriter().write(font.data)
+    expect(out.byteLength).toBeGreaterThan(0)
+  })
+
+  it('accepts alternate substitutions (lookup type 3)', () => {
+    const font = loadFixtureFont()
+    font.substitution.add('aalt', { sub: 11, alternates: [12, 13, 14] })
+    expect(font.data.gsub!.features.aalt?.alternates).toEqual([{ sub: 11, alternates: [12, 13, 14] }])
+    const out = new TTFWriter().write(font.data)
+    expect(out.byteLength).toBeGreaterThan(0)
+  })
 })

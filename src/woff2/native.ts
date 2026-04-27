@@ -16,6 +16,7 @@
 import { Reader } from '../io/reader'
 import { Writer } from '../io/writer'
 import { WOFF2_SIGNATURE } from '../ttf/enum'
+import { decodeGlyfTransform, encodeGlyfTransform } from './transform'
 
 // eslint-disable-next-line pickier/no-unused-vars
 export type BrotliCompressor = (data: Uint8Array) => Uint8Array | Promise<Uint8Array>
@@ -135,11 +136,24 @@ function tagIndex(tag: string): number {
   return WOFF2_KNOWN_TABLES.indexOf(tag)
 }
 
+export interface EncodeWOFF2Options {
+  /**
+   * Apply the WOFF2 §5.1 glyf/loca transform. Recovers ~10–15% in
+   * compressed size at the cost of a longer encode. Default `true` when
+   * the font has TT outlines; ignored for CFF.
+   */
+  transformGlyf?: boolean
+}
+
 /**
  * Encode a TTF/OTF ArrayBuffer as WOFF2 using the given Brotli compressor.
  * If no compressor is passed, attempts Node's built-in Brotli.
  */
-export async function encodeWOFF2Native(ttfBuffer: ArrayBuffer, compress?: BrotliCompressor): Promise<Uint8Array> {
+export async function encodeWOFF2Native(
+  ttfBuffer: ArrayBuffer,
+  compress?: BrotliCompressor,
+  opts: EncodeWOFF2Options = {},
+): Promise<Uint8Array> {
   const br = compress ?? await getDefaultCompressor()
   if (!br)
     throw new Error('No Brotli encoder available — pass a compressor or call setBrotli()')
@@ -164,29 +178,65 @@ export async function encodeWOFF2Native(ttfBuffer: ArrayBuffer, compress?: Brotl
     entries.push({ tag, origOffset: offset, origLength: length, origChecksum: checksum })
   }
 
-  // Build concatenated, unpadded, untransformed table stream
+  // Decide per-table what bytes to feed the brotli compressor and what
+  // transformLength to advertise in the directory.
+  const useGlyfTransform = (opts.transformGlyf ?? true) && entries.some(e => e.tag === 'glyf') && entries.some(e => e.tag === 'loca')
+  let transformedGlyfBytes: Uint8Array | null = null
+  if (useGlyfTransform) {
+    try {
+      transformedGlyfBytes = encodeGlyfTransform(ttfBuffer)
+    }
+    catch {
+      // If the encoder rejects the font for any reason, fall back to identity.
+      transformedGlyfBytes = null
+    }
+  }
+
+  // Build concatenated, unpadded table stream — using the transformed glyf
+  // bytes when applicable, and dropping loca entirely (loca is consumed by
+  // the glyf-transform decoder).
   const src = new Uint8Array(ttfBuffer)
   const stream: number[] = []
+  interface DirEntry { tag: string, origLength: number, transformLength?: number }
+  const dirEntries: DirEntry[] = []
   for (const e of entries) {
-    for (let k = 0; k < e.origLength; k++)
-      stream.push(src[e.origOffset + k])
+    if (transformedGlyfBytes && e.tag === 'glyf') {
+      for (let k = 0; k < transformedGlyfBytes.length; k++) stream.push(transformedGlyfBytes[k])
+      dirEntries.push({ tag: 'glyf', origLength: e.origLength, transformLength: transformedGlyfBytes.length })
+      continue
+    }
+    if (transformedGlyfBytes && e.tag === 'loca') {
+      // Transformed loca contributes 0 bytes to the stream.
+      dirEntries.push({ tag: 'loca', origLength: e.origLength, transformLength: 0 })
+      continue
+    }
+    for (let k = 0; k < e.origLength; k++) stream.push(src[e.origOffset + k])
+    dirEntries.push({ tag: e.tag, origLength: e.origLength })
   }
   const streamBytes = Uint8Array.from(stream)
   const maybeCompressed = br(streamBytes)
   const compressed = maybeCompressed instanceof Promise ? await maybeCompressed : maybeCompressed
 
-  // Build WOFF2 table directory
+  // Build WOFF2 table directory.
   const dirBytes: number[] = []
-  for (const e of entries) {
+  for (const e of dirEntries) {
     const kt = tagIndex(e.tag)
-    const flags = kt < 0 ? 0x3F : (kt | 0xC0) // flags low 6 bits = table index, high 2 = transformVersion=3 (null)
+    // Top 2 bits = transformVersion. 0 = transformed (only valid for glyf/loca);
+    // 3 (binary 11) = identity / null transform for everything else.
+    let transformVersion = 3
+    if ((e.tag === 'glyf' || e.tag === 'loca') && e.transformLength !== undefined) {
+      transformVersion = 0
+    }
+    const flags = kt < 0 ? (transformVersion << 6) | 0x3F : (kt | (transformVersion << 6))
     dirBytes.push(flags)
     if (kt < 0) {
-      // Emit 4-char tag
       for (let i = 0; i < 4; i++) dirBytes.push(e.tag.charCodeAt(i))
     }
     writeBase128(e.origLength, dirBytes)
-    // For glyf/loca with transformVersion=3 (identity), skip transformLength
+    // Emit transformLength for transformed glyf/loca.
+    if (e.transformLength !== undefined) {
+      writeBase128(e.transformLength, dirBytes)
+    }
   }
 
   const headerSize = 48
@@ -287,11 +337,31 @@ export async function decodeWOFF2Native(woff2Buffer: ArrayBuffer | Uint8Array, d
   const maybe = br(compressed)
   const decompressed = maybe instanceof Promise ? await maybe : maybe
 
-  // Rebuild SFNT (only identity-transform tables are supported — caller
-  // must use the WASM bridge for fonts with glyf/loca transform applied)
-  for (const e of entries) {
-    if (e.transformVersion === 0 && (e.tag === 'glyf' || e.tag === 'loca'))
-      throw new Error('WOFF2 with glyf/loca transform requires the WASM bridge (woff2.init)')
+  // If the font carries the glyf/loca transform, decode it before SFNT
+  // assembly so we can splice the reconstructed bytes back into the
+  // per-table positions.
+  const transformedGlyfEntry = entries.find(e => e.tag === 'glyf' && e.transformVersion === 0)
+  let decodedGlyf: Uint8Array | null = null
+  let decodedLoca: Uint8Array | null = null
+  if (transformedGlyfEntry) {
+    // The transformed glyf bytes occupy `transformLength` bytes in the stream;
+    // walk the stream to find them.
+    let glyfStreamStart = 0
+    for (const e of entries) {
+      if (e === transformedGlyfEntry) break
+      // Each entry's stream contribution: transformed length if transformed,
+      // origLength otherwise. (Transformed loca contributes 0.)
+      if (e.tag === 'loca' && e.transformVersion === 0) continue
+      glyfStreamStart += e.transformLength
+    }
+    const transformedSlice = decompressed.subarray(glyfStreamStart, glyfStreamStart + transformedGlyfEntry.transformLength)
+    const decoded = decodeGlyfTransform(transformedSlice)
+    decodedGlyf = decoded.glyf
+    decodedLoca = decoded.loca
+    // Override the entries' origLength to match the decoded sizes.
+    transformedGlyfEntry.origLength = decodedGlyf.length
+    const locaEntry = entries.find(e => e.tag === 'loca' && e.transformVersion === 0)
+    if (locaEntry) locaEntry.origLength = decodedLoca.length
   }
 
   // Assemble TTF
@@ -334,8 +404,18 @@ export async function decodeWOFF2Native(woff2Buffer: ArrayBuffer | Uint8Array, d
   const dstView = new Uint8Array(out)
   for (let i = 0; i < entries.length; i++) {
     const e = entries[i]
-    dstView.set(decompressed.subarray(srcPos, srcPos + e.origLength), offsets[i])
-    srcPos += e.origLength
+    if (e.transformVersion === 0 && e.tag === 'glyf' && decodedGlyf) {
+      dstView.set(decodedGlyf, offsets[i])
+      srcPos += e.transformLength
+    }
+    else if (e.transformVersion === 0 && e.tag === 'loca' && decodedLoca) {
+      dstView.set(decodedLoca, offsets[i])
+      // transformed loca is 0 bytes in the stream
+    }
+    else {
+      dstView.set(decompressed.subarray(srcPos, srcPos + e.origLength), offsets[i])
+      srcPos += e.origLength
+    }
   }
 
   return new Uint8Array(out)

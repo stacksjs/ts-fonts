@@ -88,6 +88,8 @@ export { toArrayBuffer, toBuffer } from './util/buffer'
 export type { BezPoint } from './util/bezier'
 export { cubicToQuadratic } from './util/bezier'
 export { compound2simpleglyf, glyfAdjust, optimizettf, reduceGlyf } from './util/glyph-ops'
+export type { SubsetOptions } from './util/subset'
+export { subsetGlyphs } from './util/subset'
 export { unicode2esc, unicode2xml } from './util/unicode-xml'
 
 // Variable fonts
@@ -118,9 +120,13 @@ export type { OTFWriterOptions } from './cff/otf-writer'
 export { createOTFWriter, OTFWriter } from './cff/otf-writer'
 
 // GSUB authoring
-export type { SubstitutionLigatureInput } from './ot/substitution'
+export type { SubstitutionAlternateInput, SubstitutionInput, SubstitutionLigatureInput, SubstitutionMultipleInput, SubstitutionSingleInput } from './ot/substitution'
 export { Substitution } from './ot/substitution'
-export type { GsubAuthoring, GsubFeatureAuthoring, GsubLigatureEntry } from './types'
+export type { GsubAlternateEntry, GsubAuthoring, GsubFeatureAuthoring, GsubLigatureEntry, GsubMultipleEntry, GsubSingleEntry } from './types'
+
+// GPOS authoring
+export { Positioning } from './ot/positioning'
+export type { GposAuthoring, GposFeatureAuthoring, GposPairEntry, GposValueRecord } from './types'
 
 // WOFF2 bridge
 export { woff2 } from './woff2'

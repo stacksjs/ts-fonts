@@ -393,6 +393,11 @@ export interface TTFObject {
    * Populate via `font.substitution.add('liga', { sub, by })`.
    */
   gsub?: GsubAuthoring
+  /**
+   * Authored GPOS content (kerning pairs etc). Populate via
+   * `font.positioning.addPair('kern', first, second, { xAdvance })`.
+   */
+  gpos?: GposAuthoring
   support?: {
     tables?: Array<{ name: string, checkSum: number, offset: number, length: number, size: number }>
     head?: Partial<HeadTable>
@@ -410,8 +415,32 @@ export interface GsubLigatureEntry {
   by: number
 }
 
+/** Single substitution (lookup type 1): replace one glyph with another. */
+export interface GsubSingleEntry {
+  sub: number
+  by: number
+}
+
+/** Multiple substitution (lookup type 2): one glyph → ordered glyph sequence. */
+export interface GsubMultipleEntry {
+  sub: number
+  by: number[]
+}
+
+/** Alternate substitution (lookup type 3): one glyph → choose one of N glyphs. */
+export interface GsubAlternateEntry {
+  sub: number
+  alternates: number[]
+}
+
 /** A 4-character feature tag plus its ordered list of authored lookups. */
 export interface GsubFeatureAuthoring {
+  /** Single substitutions (lookup type 1). */
+  singles?: GsubSingleEntry[]
+  /** Multiple substitutions (lookup type 2). */
+  multiples?: GsubMultipleEntry[]
+  /** Alternate substitutions (lookup type 3). */
+  alternates?: GsubAlternateEntry[]
   /** Ligature substitutions (lookup type 4). */
   ligatures?: GsubLigatureEntry[]
 }
@@ -427,6 +456,37 @@ export interface GsubAuthoring {
   /** Script tag (default `'DFLT'`). */
   script?: string
   /** Language tag (default `'dflt'`). */
+  language?: string
+}
+
+/** ----- GPOS authoring (positioning) ----- */
+
+/** A single value record component. We support only `xAdvance` for kerning. */
+export interface GposValueRecord {
+  xPlacement?: number
+  yPlacement?: number
+  xAdvance?: number
+  yAdvance?: number
+}
+
+/** Pair-positioning entry: when `first` is followed by `second`, apply value adjustments. */
+export interface GposPairEntry {
+  first: number
+  second: number
+  /** Value applied to the FIRST glyph. Most kerning only sets `xAdvance` here. */
+  value1: GposValueRecord
+  /** Value applied to the SECOND glyph (usually empty for simple kerning). */
+  value2?: GposValueRecord
+}
+
+export interface GposFeatureAuthoring {
+  /** Pair positioning (lookup type 2). */
+  pairs?: GposPairEntry[]
+}
+
+export interface GposAuthoring {
+  features: Record<string, GposFeatureAuthoring>
+  script?: string
   language?: string
 }
 

@@ -278,7 +278,10 @@ export function writeGpos(writer: Writer, ttf: TTFObject): void {
       const subAbs = writer.offset - tableStart
       const subRel = subAbs - (lookupTableStart - tableStart)
       {
-        const sv = writer.offset; writer.seek(subtableOffsetPositions[s]!); writer.writeUint16(subRel); writer.seek(sv)
+        const sv = writer.offset
+        writer.seek(subtableOffsetPositions[s]!)
+        writer.writeUint16(subRel)
+        writer.seek(sv)
       }
       lk.writeSubtable(writer, s)
     }

@@ -364,6 +364,7 @@ export function writeCFF(opts: CffWriteOptions): Uint8Array {
   let cursor = 0
   cursor += headerBytes.length
   cursor += nameIndex.length
+  // eslint-disable-next-line pickier/no-unused-vars -- offset captured for layout doc
   const topDictIndexOff = cursor
   cursor += topDictIndex.length
   cursor += stringIndex.length

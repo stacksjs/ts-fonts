@@ -106,7 +106,7 @@ export class OTFWriter {
     const numTables = tables.length
     const headerSize = 12
     const dirSize = 16 * numTables
-    let dataOffset = headerSize + dirSize
+    const dataOffset = headerSize + dirSize
     const tableOffsets: number[] = []
     const tableSizes: number[] = []
     let totalSize = dataOffset
@@ -130,7 +130,7 @@ export class OTFWriter {
     writer.writeUint16(numTables * 16 - searchRange)
 
     // Sort by tag for the directory (per spec).
-    const order = tables.map((t, i) => i).sort((a, b) => tables[a]!.tag < tables[b]!.tag ? -1 : tables[a]!.tag > tables[b]!.tag ? 1 : 0)
+    const order = Array.from(tables.keys()).sort((a, b) => tables[a]!.tag < tables[b]!.tag ? -1 : tables[a]!.tag > tables[b]!.tag ? 1 : 0)
     for (const i of order) {
       const t = tables[i]!
       writer.writeString(`${t.tag}    `.slice(0, 4), 4)

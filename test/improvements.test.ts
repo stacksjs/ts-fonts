@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { brotliDecompressSync } from 'node:zlib'
 import { describe, expect, it } from 'bun:test'
 import {
   arabicForms,
@@ -329,6 +330,70 @@ describe('Native WOFF2 encoder/decoder', () => {
     const original = new TTFReader().read(ttf)
     expect(parsed.glyf.length).toBe(original.glyf.length)
     expect(parsed.name.fontFamily).toBe(original.name.fontFamily)
+  })
+
+  it('uses valid transform-version bits for null-transformed tables', async () => {
+    const ttf = loadBuffer('bebas.ttf')
+    const woff2 = await encodeWOFF2Native(ttf, undefined, { transformGlyf: false })
+
+    const knownTables = [
+      'cmap', 'head', 'hhea', 'hmtx', 'maxp', 'name', 'OS/2', 'post',
+      'cvt ', 'fpgm', 'glyf', 'loca', 'prep', 'CFF ', 'VORG', 'EBDT',
+      'EBLC', 'gasp', 'hdmx', 'kern', 'LTSH', 'PCLT', 'VDMX', 'vhea',
+      'vmtx', 'BASE', 'GDEF', 'GPOS', 'GSUB', 'EBSC', 'JSTF', 'MATH',
+      'CBDT', 'CBLC', 'COLR', 'CPAL', 'SVG ', 'sbix', 'acnt', 'avar',
+      'bdat', 'bloc', 'bsln', 'cvar', 'fdsc', 'feat', 'fmtx', 'fvar',
+      'gvar', 'hsty', 'just', 'lcar', 'mort', 'morx', 'opbd', 'prop',
+      'trak', 'Zapf', 'Silf', 'Glat', 'Gloc', 'Feat', 'Sill',
+    ]
+
+    const tableVersions: Record<string, number> = {}
+    let decompressedSize = 0
+    let cursor = 48
+    const tableCount = (woff2[12] << 8) | woff2[13]
+    const compressedSize = (woff2[20] << 24) | (woff2[21] << 16) | (woff2[22] << 8) | woff2[23]
+    for (let i = 0; i < tableCount; i++) {
+      const flags = woff2[cursor++]
+      const tableIndex = flags & 0x3F
+      const version = (flags >> 6) & 0x03
+      let tag = knownTables[tableIndex]!
+      if (tableIndex === 0x3F) {
+        tag = String.fromCharCode(woff2[cursor], woff2[cursor + 1], woff2[cursor + 2], woff2[cursor + 3])
+        cursor += 4
+      }
+
+      let origLength = 0
+      for (let j = 0; j < 5; j++) {
+        const byte = woff2[cursor++]
+        origLength = (origLength << 7) | (byte & 0x7F)
+        if ((byte & 0x80) === 0) break
+      }
+      if ((tag === 'glyf' || tag === 'loca') && version === 0) {
+        let transformLength = 0
+        for (let j = 0; j < 5; j++) {
+          const byte = woff2[cursor++]
+          transformLength = (transformLength << 7) | (byte & 0x7F)
+          if ((byte & 0x80) === 0) break
+        }
+        decompressedSize += transformLength
+      }
+      else {
+        decompressedSize += origLength
+      }
+      if (tag === 'glyf' || tag === 'loca')
+        expect(version).toBe(3)
+      else
+        expect(version).toBe(0)
+      tableVersions[tag] = version
+    }
+
+    expect(tableVersions.glyf).toBe(3)
+    expect(tableVersions.loca).toBe(3)
+    expect(tableVersions.cmap).toBe(0)
+    expect(woff2.length).toBe(cursor + compressedSize + ((4 - ((cursor + compressedSize) % 4)) % 4))
+
+    const decompressed = brotliDecompressSync(woff2.subarray(cursor, cursor + compressedSize))
+    expect(decompressed.length).toBe(decompressedSize)
   })
 })
 

@@ -1,20 +1,20 @@
 /**
- * Native WOFF2 encoder/decoder that does NOT require the Google WOFF2
- * WASM module. Uses whatever Brotli implementation is available on the
- * host:
+ * Native WOFF2 encoder/decoder that does not require the Google WOFF2
+ * module. Uses whatever Brotli implementation is available on the host:
  *
  *   - Node.js: `zlib.brotliCompressSync` / `zlib.brotliDecompressSync`
  *   - Deno / modern browsers: `CompressionStream('br')` if implemented
  *   - Caller override: `setBrotli({ compress, decompress })`
  *
- * The encoder emits WOFF2 with null transforms (transformVersion=3 for
- * glyf/loca), which is permitted by the spec. Compression ratios are
- * ~10–15% worse than Google's transformed output, but round-trip is
- * correct and the resulting files are accepted by every WOFF2 consumer.
+ * The encoder defaults to WOFF2 null transforms (transformVersion=3 for
+ * glyf/loca), which is permitted by the spec and accepted by browsers.
+ * Compression ratios are lower than Google's transformed output, but
+ * round-trip is correct.
  */
 
 import { Reader } from '../io/reader'
 import { Writer } from '../io/writer'
+import { pad4 } from '../ttf/checksum'
 import { WOFF2_SIGNATURE } from '../ttf/enum'
 import { decodeGlyfTransform, encodeGlyfTransform } from './transform'
 
@@ -40,7 +40,12 @@ async function getDefaultCompressor(): Promise<BrotliCompressor | undefined> {
   if (g.process) {
     try {
       const zlib = await import('node:zlib')
-      return (data: Uint8Array) => new Uint8Array(zlib.brotliCompressSync(data))
+      return (data: Uint8Array) => new Uint8Array(zlib.brotliCompressSync(data, {
+        params: {
+          [zlib.constants.BROTLI_PARAM_LGWIN]: 11,
+          [zlib.constants.BROTLI_PARAM_QUALITY]: 11,
+        },
+      }))
     }
     catch {
       // fall through
@@ -136,11 +141,30 @@ function tagIndex(tag: string): number {
   return WOFF2_KNOWN_TABLES.indexOf(tag)
 }
 
+function orderWoff2Tables<T extends { tag: string }>(entries: T[]): T[] {
+  const glyf = entries.find(e => e.tag === 'glyf')
+  const loca = entries.find(e => e.tag === 'loca')
+  if (!glyf || !loca)
+    return entries
+
+  const ordered: T[] = []
+  for (const entry of entries) {
+    if (entry.tag === 'loca')
+      continue
+
+    ordered.push(entry)
+    if (entry.tag === 'glyf')
+      ordered.push(loca)
+  }
+
+  return ordered
+}
+
 export interface EncodeWOFF2Options {
   /**
-   * Apply the WOFF2 §5.1 glyf/loca transform. Recovers ~10–15% in
-   * compressed size at the cost of a longer encode. Default `true` when
-   * the font has TT outlines; ignored for CFF.
+   * Apply the WOFF2 §5.1 glyf/loca transform. Recovers space at the cost
+   * of a longer encode. Default `false` until the transformed stream is
+   * covered by browser-compatibility tests; ignored for CFF.
    */
   transformGlyf?: boolean
 }
@@ -177,10 +201,9 @@ export async function encodeWOFF2Native(
     const length = reader.readUint32()
     entries.push({ tag, origOffset: offset, origLength: length, origChecksum: checksum })
   }
-
   // Decide per-table what bytes to feed the brotli compressor and what
   // transformLength to advertise in the directory.
-  const useGlyfTransform = (opts.transformGlyf ?? true) && entries.some(e => e.tag === 'glyf') && entries.some(e => e.tag === 'loca')
+  const useGlyfTransform = (opts.transformGlyf ?? false) && entries.some(e => e.tag === 'glyf') && entries.some(e => e.tag === 'loca')
   let transformedGlyfBytes: Uint8Array | null = null
   if (useGlyfTransform) {
     try {
@@ -191,6 +214,7 @@ export async function encodeWOFF2Native(
       transformedGlyfBytes = null
     }
   }
+  const woffEntries = transformedGlyfBytes ? orderWoff2Tables(entries) : entries
 
   // Build concatenated, unpadded table stream — using the transformed glyf
   // bytes when applicable, and dropping loca entirely (loca is consumed by
@@ -199,7 +223,7 @@ export async function encodeWOFF2Native(
   const stream: number[] = []
   interface DirEntry { tag: string, origLength: number, transformLength?: number }
   const dirEntries: DirEntry[] = []
-  for (const e of entries) {
+  for (const e of woffEntries) {
     if (transformedGlyfBytes && e.tag === 'glyf') {
       for (let k = 0; k < transformedGlyfBytes.length; k++) stream.push(transformedGlyfBytes[k])
       dirEntries.push({ tag: 'glyf', origLength: e.origLength, transformLength: transformedGlyfBytes.length })
@@ -221,11 +245,15 @@ export async function encodeWOFF2Native(
   const dirBytes: number[] = []
   for (const e of dirEntries) {
     const kt = tagIndex(e.tag)
-    // Top 2 bits = transformVersion. 0 = transformed (only valid for glyf/loca);
-    // 3 (binary 11) = identity / null transform for everything else.
-    let transformVersion = 3
+    // Top 2 bits = transformVersion. For most tables, 0 is the null
+    // transform. glyf/loca are special: 0 means WOFF2's glyf transform,
+    // while 3 is their null transform.
+    let transformVersion = 0
     if ((e.tag === 'glyf' || e.tag === 'loca') && e.transformLength !== undefined) {
       transformVersion = 0
+    }
+    else if (e.tag === 'glyf' || e.tag === 'loca') {
+      transformVersion = 3
     }
     const flags = kt < 0 ? (transformVersion << 6) | 0x3F : (kt | (transformVersion << 6))
     dirBytes.push(flags)
@@ -233,16 +261,16 @@ export async function encodeWOFF2Native(
       for (let i = 0; i < 4; i++) dirBytes.push(e.tag.charCodeAt(i))
     }
     writeBase128(e.origLength, dirBytes)
-    // Emit transformLength for transformed glyf/loca.
-    if (e.transformLength !== undefined) {
+    // transformLength is present only when a non-null transform is applied.
+    if (e.transformLength !== undefined)
       writeBase128(e.transformLength, dirBytes)
-    }
   }
 
   const headerSize = 48
   const dirSize = dirBytes.length
   const compressedSize = compressed.length
-  const totalSize = headerSize + dirSize + compressedSize + (compressedSize % 4 === 0 ? 0 : 4 - compressedSize % 4)
+  const unpaddedTotalSize = headerSize + dirSize + compressedSize
+  const totalSize = unpaddedTotalSize + pad4(unpaddedTotalSize)
 
   // totalSfntSize for WOFF2 header: 12 + numTables*16 + padded(origLength)
   let totalSfntSize = 12 + numTables * 16

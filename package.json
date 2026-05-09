@@ -72,6 +72,7 @@
     "changelog": "bunx logsmith --verbose",
     "changelog:generate": "bunx logsmith --output CHANGELOG.md",
     "release": "bun --bun run changelog:generate && bunx --bun bumpx prompt --recursive",
+    "release:patch": "bun --bun run changelog:generate && bunx --bun bumpx patch --recursive --yes",
     "postinstall": "bunx git-hooks",
     "dev:docs": "bun --bun bunpress dev docs",
     "build:docs": "bun --bun bunpress build docs",

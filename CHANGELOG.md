@@ -1,3 +1,29 @@
+### 🐛 Bug Fixes
+
+- decouple release from npm token ([c7ae116](https://github.com/stacksjs/ts-fonts/commit/c7ae116)) _(by Chris <chrisbreuer93@gmail.com>)_
+- emit browser-compatible woff2 files ([3b2756f](https://github.com/stacksjs/ts-fonts/commit/3b2756f)) _(by Chris <chrisbreuer93@gmail.com>)_
+- **lint**: expand inline writer block ([a97f227](https://github.com/stacksjs/ts-fonts/commit/a97f227)) _(by chrisbreuer <chrisbreuer93@gmail.com>)_
+- **lint**: cff/ttf cleanup ([38a33a1](https://github.com/stacksjs/ts-fonts/commit/38a33a1)) _(by chrisbreuer <chrisbreuer93@gmail.com>)_
+
+### 🧹 Chores
+
+- reset release baseline ([025118e](https://github.com/stacksjs/ts-fonts/commit/025118e)) _(by Chris <chrisbreuer93@gmail.com>)_
+- release v0.5.2 ([f87dc9e](https://github.com/stacksjs/ts-fonts/commit/f87dc9e)) _(by Chris <chrisbreuer93@gmail.com>)_
+- release v0.5.1 ([b655965](https://github.com/stacksjs/ts-fonts/commit/b655965)) _(by Chris <chrisbreuer93@gmail.com>)_
+- wip ([859f74b](https://github.com/stacksjs/ts-fonts/commit/859f74b)) _(by Chris <chrisbreuer93@gmail.com>)_
+- wip ([304fe21](https://github.com/stacksjs/ts-fonts/commit/304fe21)) _(by Chris <chrisbreuer93@gmail.com>)_
+- wip ([65ae41b](https://github.com/stacksjs/ts-fonts/commit/65ae41b)) _(by Chris <chrisbreuer93@gmail.com>)_
+- initial commit ([d57a2f1](https://github.com/stacksjs/ts-fonts/commit/d57a2f1)) _(by Chris <chrisbreuer93@gmail.com>)_
+
+### ⏪ Reverts
+
+- keep staged-lint kebab + bunx gitlint shorthand ([18815f4](https://github.com/stacksjs/ts-fonts/commit/18815f4)) _(by chrisbreuer <chrisbreuer93@gmail.com>)_
+
+### Contributors
+
+- _Chris <chrisbreuer93@gmail.com>_
+- _chrisbreuer <chrisbreuer93@gmail.com>_
+
 [Compare changes](https://github.com/stacksjs/ts-fonts/compare/v0.5.1...v0.5.2)
 
 ### 🐛 Bug Fixes

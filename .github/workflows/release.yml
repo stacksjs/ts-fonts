@@ -12,6 +12,9 @@ jobs:
     permissions:
       contents: write
       id-token: write
+    env:
+      NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+      PANTRY_REGISTRY_TOKEN: ${{ secrets.PANTRY_TOKEN }}
 
     steps:
       - name: Checkout
@@ -28,12 +31,19 @@ jobs:
       - name: Install Dependencies
         run: bun install
 
-      - name: Publish
-        run: pantry publish --npm --access public
-        env:
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+      - name: Publish Commit to Pantry
+        if: env.PANTRY_REGISTRY_TOKEN != ''
+        run: pantry publish:commit '.'
 
       - name: Create GitHub Release
         uses: stacksjs/action-releaser@v1.2.9
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Publish to npm
+        if: env.NPM_TOKEN != ''
+        run: pantry publish --npm --access public
+
+      - name: Skip npm publish
+        if: env.NPM_TOKEN == ''
+        run: echo "NPM_TOKEN is not configured; GitHub release and Pantry commit publishing completed."

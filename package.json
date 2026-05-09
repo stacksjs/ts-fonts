@@ -1,7 +1,7 @@
 {
   "name": "ts-fonts",
   "type": "module",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "description": "A pure-TypeScript font toolkit for Bun: read/write TTF/OTF/WOFF/WOFF2, build variable fonts, opentype.js-compatible Path/Glyph/Font, native WOFF2 (Brotli-backed), GSUB authoring, and CFF emission.",
   "author": "Chris Breuer <chris@stacksjs.org>",
   "license": "MIT",

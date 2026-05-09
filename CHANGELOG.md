@@ -1,3 +1,27 @@
+[Compare changes](https://github.com/stacksjs/ts-fonts/compare/v0.5.1...v0.5.2)
+
+### 🐛 Bug Fixes
+
+- decouple release from npm token ([c7ae116](https://github.com/stacksjs/ts-fonts/commit/c7ae116)) _(by Chris <chrisbreuer93@gmail.com>)_
+
+### 🧹 Chores
+
+- release v0.5.2 ([4b49bc6](https://github.com/stacksjs/ts-fonts/commit/4b49bc6)) _(by Chris <chrisbreuer93@gmail.com>)_
+
+### Contributors
+
+- _Chris <chrisbreuer93@gmail.com>_
+
+[Compare changes](https://github.com/stacksjs/ts-fonts/compare/v0.5.1...HEAD)
+
+### 🐛 Bug Fixes
+
+- decouple release from npm token ([c7ae116](https://github.com/stacksjs/ts-fonts/commit/c7ae116)) _(by Chris <chrisbreuer93@gmail.com>)_
+
+### Contributors
+
+- _Chris <chrisbreuer93@gmail.com>_
+
 ### 🐛 Bug Fixes
 
 - emit browser-compatible woff2 files ([3b2756f](https://github.com/stacksjs/ts-fonts/commit/3b2756f)) _(by Chris <chrisbreuer93@gmail.com>)_
